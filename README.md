@@ -128,7 +128,7 @@ The markdown export includes:
 
 The generated guidance is based on ProcessWire field types and field context where available.
 
-Tip: include a clear stop cue in your own prompt instructions. Tell the agent what to return when required conditions cannot be met, for example when source data is missing, a required field cannot be populated confidently, or no valid Page Reference option applies.
+**Tip**: include a clear stop cue in your own prompt instructions. Tell the agent what to return when required conditions cannot be met, for example when source data is missing, a required field cannot be populated confidently, or no valid Page Reference option applies.
 
 Example prompt instruction:
 
