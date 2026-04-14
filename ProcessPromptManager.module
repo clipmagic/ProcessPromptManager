@@ -1,0 +1,627 @@
+<?php declare(strict_types=1);
+
+namespace ProcessWire;
+
+require_once __DIR__ . '/PromptManagerHelper.php';
+
+/**
+ * Admin Process module for managing site-aware AI agent prompt definitions.
+ *
+ * @author Clip Magic, Marvin and Dex, 2026
+ * @license MIT
+ */
+class ProcessPromptManager extends Process {
+
+  protected const TABLE_BASE = 'prompt_manager_definitions';
+
+  protected PromptManagerHelper $helper;
+
+  public function init(): void {
+    parent::init();
+    $this->helper = $this->wire(new PromptManagerHelper());
+    $this->helper->setPageReferenceOptionValueProvider($this);
+  }
+
+  public function ___pageReferenceOptionValue(Page $page, Field $field, ?Template $template = null): mixed {
+    return trim((string) $page->get('title|name'));
+  }
+
+  public function ___execute(): string {
+    $this->headline($this->_('Prompt Manager'));
+    $this->browserTitle($this->_('Prompt Manager'));
+    $this->addFormScripts();
+
+    $input = $this->wire()->input;
+    $modules = $this->wire()->modules;
+    $sanitizer = $this->wire()->sanitizer;
+    $session = $this->wire()->session;
+
+    $records = $this->findRecords();
+    if ($input->post('submit_delete_checked') && is_array($input->post('deletes'))) {
+      $session->CSRF->validate();
+      $validIds = array_map(fn(array $record): int => (int) $record['id'], $records);
+
+      foreach ($input->post('deletes') as $id) {
+        $id = (int) $id;
+        if (!in_array($id, $validIds, true)) continue;
+        $this->deleteRecord($id);
+      }
+
+      $session->redirect('./');
+    }
+
+    // @var InputfieldForm $form
+    $form = $modules->get('InputfieldForm');
+    $form->method = 'post';
+
+    // @var MarkupAdminDataTable $table
+    $table = $modules->get('MarkupAdminDataTable');
+    $table->setEncodeEntities(false);
+    $table->headerRow([
+      $this->_('Title'),
+      $this->_('Key'),
+      $this->_('Template'),
+      $this->_('Modified'),
+      $this->_('Actions'),
+      '<label>' .
+        '<input type="checkbox" id="ProcessPromptManagerDeleteAll" class="uk-checkbox" aria-label="' .
+        $sanitizer->entities($this->_('Select all prompt definitions for deletion')) .
+        '"> ' . wireIconMarkup('trash', 'lg') .
+        '</label>',
+    ]);
+
+    if (!$records) {
+      $form->description = $this->_('No prompt definitions yet.');
+    } else {
+      foreach ($records as $record) {
+        $id = (int) $record['id'];
+        $actions = [
+          $this->actionIcon('./edit/?id=' . $id, 'pencil', $this->_('Edit')),
+          $this->actionIcon('./export/?id=' . $id, 'download', $this->_('Export')),
+          $this->actionIcon('./delete/?id=' . $id, 'trash', $this->_('Delete')),
+        ];
+
+        $table->row([
+          $sanitizer->entities((string) $record['name']) => './edit/?id=' . $id,
+          $sanitizer->entities((string) $record['prompt_key']),
+          $sanitizer->entities((string) $record['template_name']),
+          $this->formatDate((string) $record['modified']),
+          implode(' &nbsp; ', $actions),
+          '<input type="checkbox" name="deletes[]" value="' . $id . '" class="delete-checkbox uk-checkbox" aria-label="' .
+            $sanitizer->entities(sprintf($this->_('Select %s for deletion'), (string) $record['name'])) .
+            '">',
+        ]);
+      }
+    }
+
+    $form->value = $table->render();
+
+    $add = $modules->get('InputfieldButton');
+    $add->value = $this->_('Add prompt definition');
+    $add->icon = 'plus';
+    $add->href = './add/';
+    $add->addClass('btn-add-prompt-manager');
+    $add->showInHeader(true);
+    $form->add($add);
+
+    if ($records) {
+      $delete = $modules->get('InputfieldSubmit');
+      $delete->attr('name', 'submit_delete_checked');
+      $delete->value = $this->_('Delete checked');
+      $delete->addClass('btn-delete-checked');
+      $delete->icon = 'trash';
+      $delete->showInHeader(true);
+      $form->add($delete);
+    }
+
+    return $form->render();
+  }
+
+  public function ___executeAdd(): string {
+    $this->headline($this->_('Add prompt definition'));
+    $this->browserTitle($this->_('Add prompt definition'));
+
+    return $this->renderEditForm($this->blankRecord());
+  }
+
+  public function ___executeEdit(): string {
+    $record = $this->getRecordFromInput();
+    if (!$record) return $this->notFound();
+
+    $this->headline(sprintf($this->_('Edit: %s'), $record['name']));
+    $this->browserTitle(sprintf($this->_('Edit: %s'), $record['name']));
+
+    return $this->renderEditForm($record);
+  }
+
+  public function ___executeDelete(): string {
+    $record = $this->getRecordFromInput();
+    if (!$record) return $this->notFound();
+
+    $input = $this->wire()->input;
+    $modules = $this->wire()->modules;
+    $sanitizer = $this->wire()->sanitizer;
+    $session = $this->wire()->session;
+
+    $this->headline(sprintf($this->_('Delete: %s'), $record['name']));
+    $this->browserTitle(sprintf($this->_('Delete: %s'), $record['name']));
+
+    // @var InputfieldForm $form
+    $form = $modules->get('InputfieldForm');
+    $form->method = 'post';
+    $form->action = './?id=' . (int) $record['id'];
+
+    $form->add([
+      'type' => 'markup',
+      'label' => $this->_('Confirm deletion'),
+      'value' => '<p>' . sprintf(
+        $this->_('Delete prompt definition "%s"?'),
+        $sanitizer->entities((string) $record['name'])
+      ) . '</p>',
+      'icon' => 'trash',
+    ]);
+
+    $submit = $modules->get('InputfieldSubmit');
+    $submit->name = 'delete_prompt';
+    $submit->value = $this->_('Delete');
+    $submit->icon = 'trash';
+    $form->add($submit);
+
+    if ($input->post('delete_prompt')) {
+      $session->CSRF->validate();
+      $this->deleteRecord((int) $record['id']);
+      $this->message(sprintf($this->_('Deleted prompt definition "%s".'), $record['name']));
+      $session->redirect('../');
+    }
+
+    return $form->render() . '<p><a href="../">' . $this->_('Cancel') . '</a></p>';
+  }
+
+  public function ___executeExport(): string {
+    $record = $this->getRecordFromInput();
+    if (!$record) return $this->notFound();
+
+    $values = $this->valuesFromRecord($record);
+    $this->downloadExportFromValues($values);
+  }
+
+  protected function renderEditForm(array $record): string {
+    $this->addFormScripts();
+
+    $input = $this->wire()->input;
+    $modules = $this->wire()->modules;
+    $sanitizer = $this->wire()->sanitizer;
+    $session = $this->wire()->session;
+    $isPost = (bool) $input->post('prompt_name');
+    $isUpdateFields = (bool) $input->post('update_fields');
+    $values = $isPost ? $this->valuesFromPost() : $this->valuesFromRecord($record);
+
+    // @var InputfieldForm $form
+    $form = $modules->get('InputfieldForm');
+    $form->method = 'post';
+    $form->action = (int) $record['id'] ? './?id=' . (int) $record['id'] : './';
+
+    $form->add([
+      'type' => 'text',
+      'name' => 'prompt_name',
+      'label' => $this->_('Prompt name'),
+      'required' => true,
+      'value' => $values['name'],
+    ]);
+
+    $form->add([
+      'type' => 'text',
+      'name' => 'prompt_key',
+      'label' => $this->_('Machine key / purpose'),
+      'description' => $this->_('A short export key is suggested from the prompt name. You can edit it if needed.'),
+      'required' => true,
+      'value' => $values['key'],
+    ]);
+
+    $template = $modules->get('InputfieldSelect');
+    $template->name = 'prompt_template';
+    $template->label = $this->_('Template');
+    $template->required = true;
+    $template->addOption('', $this->_('Select a template'));
+    foreach ($this->helper->getTemplateOptions() as $templateName => $label) {
+      $template->addOption($templateName, $label);
+    }
+    $template->value = $values['template'];
+    $form->add($template);
+
+    $fields = $modules->get('InputfieldCheckboxes');
+    $fields->name = 'prompt_fields';
+    $fields->label = $this->_('Included fields');
+    $fields->addClass('ProcessPromptManagerFields');
+    $fieldsDescription = $values['template']
+      ? $this->_('Stored and exported values are field names. Labels are shown here only for context.')
+      : $this->_('Select a template and click Update field list.');
+    $fields->entityEncodeText = false;
+    $fields->description = $sanitizer->entities($fieldsDescription) .
+      '<ul class="InputfieldCheckboxesStacked ProcessPromptManagerCheckAll"><li>' .
+      '<label><input type="checkbox" id="ProcessPromptManagerCheckAll" class="uk-checkbox"> ' .
+      $sanitizer->entities($this->_('Check all fields')) .
+      '</label></li></ul>';
+
+    foreach ($this->helper->getSelectableFieldsForTemplate($values['template']) as $fieldName => $label) {
+      $fields->addOption($fieldName, $label);
+    }
+    $fields->value = $values['fields'];
+    $form->add($fields);
+
+    $update = $modules->get('InputfieldSubmit');
+    $update->name = 'update_fields';
+    $update->value = $this->_('Update field list');
+    $update->icon = 'refresh';
+    $form->add($update);
+
+    $form->add([
+      'type' => 'textarea',
+      'name' => 'prompt_body',
+      'label' => $this->_('Prompt body / instructions'),
+      'required' => true,
+      'rows' => 10,
+      'value' => $values['prompt'],
+    ]);
+
+    $form->add([
+      'type' => 'textarea',
+      'name' => 'prompt_notes',
+      'label' => $this->_('Notes'),
+      'rows' => 4,
+      'value' => $values['notes'],
+    ]);
+
+    $normalizedFields = $this->helper->normalizeFieldNames($values['fields'], $values['template']);
+    $markdownPrompt = $this->buildMarkdownFromValues($values);
+    $payload = $this->helper->buildPayload($values['template'], $normalizedFields);
+
+    $form->add([
+      'type' => 'markup',
+      'label' => $this->_('Generated prompt preview'),
+      'value' => '<pre style="white-space:pre-wrap; overflow:auto;">' .
+        $sanitizer->entities($markdownPrompt) .
+        '</pre>',
+      'icon' => 'commenting-o',
+    ]);
+
+    $form->add([
+      'type' => 'markup',
+      'label' => $this->_('JSON field data preview'),
+      'description' => $this->_('This contains field names only. The field data types are explained in the prompt preview.'),
+      'value' => '<pre style="white-space:pre-wrap; overflow:auto;">' .
+        $sanitizer->entities($this->helper->payloadToJson($payload)) .
+        '</pre>',
+      'icon' => 'eye',
+    ]);
+
+    $submit = $modules->get('InputfieldSubmit');
+    $submit->name = 'save_prompt';
+    $submit->value = $this->_('Save prompt definition');
+    $submit->icon = 'save';
+    $form->add($submit);
+
+    $export = $modules->get('InputfieldSubmit');
+    $export->name = 'export_prompt';
+    $export->value = $this->_('Export files');
+    $export->icon = 'download';
+    $form->add($export);
+
+    if ($isPost) {
+      $session->CSRF->validate();
+    }
+
+    if ($isPost && $input->post('export_prompt')) {
+      $this->downloadExportFromValues($values);
+    }
+
+    if ($isPost && !$isUpdateFields && $input->post('save_prompt')) {
+      $errors = $this->validateValues($values, (int) $record['id']);
+      if (!$errors) {
+        $values['fields'] = $normalizedFields;
+        $id = $this->saveRecord($values, (int) $record['id']);
+        $this->message($this->_('Prompt definition saved.'));
+        $session->redirect('../edit/?id=' . $id);
+      }
+
+      foreach ($errors as $error) {
+        $this->error($error);
+      }
+    }
+
+    return $form->render() . '<p><a href="../">' . $this->_('Back to list') . '</a></p>';
+  }
+
+  protected function validateValues(array $values, int $currentId): array {
+    $errors = [];
+
+    if (trim($values['name']) === '') $errors[] = $this->_('Prompt name is required.');
+    if (trim($values['key']) === '') $errors[] = $this->_('Machine key / purpose is required.');
+    if ($values['key'] !== $this->wire()->sanitizer->pageName($values['key'], true)) {
+      $errors[] = $this->_('Machine key must be a valid ProcessWire page name.');
+    }
+    if (!$this->wire()->templates->get($values['template'])->id) $errors[] = $this->_('A valid template is required.');
+    if (trim($values['prompt']) === '') $errors[] = $this->_('Prompt body is required.');
+
+    $existing = $this->findRecordByKey($values['key']);
+    if ($existing && (int) $existing['id'] !== $currentId) {
+      $errors[] = $this->_('Machine key / purpose must be unique.');
+    }
+
+    return $errors;
+  }
+
+  protected function actionIcon(string $href, string $icon, string $label): string {
+    $sanitizer = $this->wire()->sanitizer;
+    $label = $sanitizer->entities($label);
+
+    return '<a href="' . $sanitizer->entities($href) . '" aria-label="' . $label . '" title="' . $label . '">' .
+      wireIconMarkup($icon, 'fw') .
+      '</a>';
+  }
+
+  protected function addFormScripts(): void {
+    $config = $this->wire()->config;
+    $script = 'ProcessPromptManager.js';
+    $path = $config->paths('ProcessPromptManager') . $script;
+    $url = $config->urls('ProcessPromptManager') . $script;
+    if (is_file($path)) $url .= '?m=' . filemtime($path);
+
+    $config->scripts->add($url);
+  }
+
+  protected function buildMarkdownFromValues(array $values): string {
+    $normalizedFields = $this->helper->normalizeFieldNames($values['fields'], $values['template']);
+
+    return $this->helper->buildMarkdownPrompt(
+      $values['name'],
+      $values['key'],
+      $values['template'],
+      $normalizedFields,
+      $values['prompt'],
+      $values['notes']
+    );
+  }
+
+  protected function downloadExportFromValues(array $values): void {
+    if (!class_exists('\ZipArchive')) {
+      throw new WireException($this->_('ZIP support is required to export prompt files.'));
+    }
+
+    $filename = $this->wire()->sanitizer->pageName($values['key'], true) ?: 'prompt-definition';
+    $markdown = $this->buildMarkdownFromValues($values) . "\n";
+    $json = $this->helper->payloadToJson(
+      $this->helper->buildPayload($values['template'], $values['fields'])
+    ) . "\n";
+
+    $zipPath = tempnam(sys_get_temp_dir(), 'prompt-manager-');
+    if (!$zipPath) throw new WireException($this->_('Unable to create export file.'));
+
+    $zip = new \ZipArchive();
+    if ($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+      unlink($zipPath);
+      throw new WireException($this->_('Unable to open export file.'));
+    }
+
+    $zip->addFromString($filename . '.md', $markdown);
+    $zip->addFromString($filename . '.json', $json);
+    foreach ($this->helper->buildPageReferenceOptionFiles($filename, $values['template'], $values['fields']) as $optionFilename => $optionJson) {
+      $zip->addFromString($optionFilename, $optionJson);
+    }
+    $choiceOptionFiles = $this->helper->buildFieldChoiceOptionFiles($filename, $values['template'], $values['fields']);
+    foreach ($choiceOptionFiles as $optionFilename => $optionJson) {
+      $zip->addFromString($optionFilename, $optionJson);
+    }
+    $zip->close();
+
+    header('Content-Type: application/zip');
+    header('Content-Disposition: attachment; filename="' . $filename . '.zip"');
+    header('Content-Length: ' . filesize($zipPath));
+    readfile($zipPath);
+    unlink($zipPath);
+    exit;
+  }
+
+  protected function valuesFromRecord(array $record): array {
+    return [
+      'name' => (string) ($record['name'] ?? ''),
+      'key' => (string) ($record['prompt_key'] ?? ''),
+      'template' => (string) ($record['template_name'] ?? ''),
+      'fields' => $this->helper->decodeFieldNames((string) ($record['field_names'] ?? '')),
+      'prompt' => (string) ($record['prompt_body'] ?? ''),
+      'notes' => (string) ($record['notes'] ?? ''),
+    ];
+  }
+
+  protected function valuesFromPost(): array {
+    $post = $this->wire()->input->post;
+    $sanitizer = $this->wire()->sanitizer;
+    $fieldValues = $post->get('prompt_fields');
+    $name = $sanitizer->text((string) $post->get('prompt_name'));
+    $key = trim((string) $post->get('prompt_key'));
+    $key = $sanitizer->pageName($key ?: $name, true);
+
+    return [
+      'name' => $name,
+      'key' => $key,
+      'template' => $sanitizer->templateName((string) $post->get('prompt_template')),
+      'fields' => is_array($fieldValues) ? $fieldValues : [],
+      'prompt' => trim((string) $post->get('prompt_body')),
+      'notes' => trim((string) $post->get('prompt_notes')),
+    ];
+  }
+
+  protected function getRecordFromInput(): ?array {
+    $id = (int) $this->wire()->input->get('id');
+    return $id ? $this->findRecordById($id) : null;
+  }
+
+  protected function findRecords(): array {
+    $query = $this->wire()->database->prepare(
+      'SELECT * FROM `' . $this->tableName() . '` ORDER BY modified DESC, id DESC'
+    );
+    $query->execute();
+
+    return $query->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+  }
+
+  protected function findRecordById(int $id): ?array {
+    $query = $this->wire()->database->prepare(
+      'SELECT * FROM `' . $this->tableName() . '` WHERE id = :id LIMIT 1'
+    );
+    $query->bindValue(':id', $id, \PDO::PARAM_INT);
+    $query->execute();
+    $record = $query->fetch(\PDO::FETCH_ASSOC);
+
+    return is_array($record) ? $record : null;
+  }
+
+  protected function findRecordByKey(string $key): ?array {
+    $query = $this->wire()->database->prepare(
+      'SELECT * FROM `' . $this->tableName() . '` WHERE prompt_key = :prompt_key LIMIT 1'
+    );
+    $query->bindValue(':prompt_key', $key);
+    $query->execute();
+    $record = $query->fetch(\PDO::FETCH_ASSOC);
+
+    return is_array($record) ? $record : null;
+  }
+
+  protected function saveRecord(array $values, int $id = 0): int {
+    $database = $this->wire()->database;
+    $fieldsJson = json_encode($values['fields'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '[]';
+
+    if ($id) {
+      $query = $database->prepare(
+        'UPDATE `' . $this->tableName() . '`
+        SET name = :name, prompt_key = :prompt_key, template_name = :template_name,
+          field_names = :field_names, prompt_body = :prompt_body, notes = :notes, modified = NOW()
+        WHERE id = :id'
+      );
+      $query->bindValue(':id', $id, \PDO::PARAM_INT);
+    } else {
+      $query = $database->prepare(
+        'INSERT INTO `' . $this->tableName() . '`
+        (name, prompt_key, template_name, field_names, prompt_body, notes, created, modified)
+        VALUES (:name, :prompt_key, :template_name, :field_names, :prompt_body, :notes, NOW(), NOW())'
+      );
+    }
+
+    $query->bindValue(':name', $values['name']);
+    $query->bindValue(':prompt_key', $values['key']);
+    $query->bindValue(':template_name', $values['template']);
+    $query->bindValue(':field_names', $fieldsJson);
+    $query->bindValue(':prompt_body', $values['prompt']);
+    $query->bindValue(':notes', $values['notes']);
+    $query->execute();
+
+    return $id ?: (int) $database->lastInsertId();
+  }
+
+  protected function deleteRecord(int $id): void {
+    $query = $this->wire()->database->prepare(
+      'DELETE FROM `' . $this->tableName() . '` WHERE id = :id'
+    );
+    $query->bindValue(':id', $id, \PDO::PARAM_INT);
+    $query->execute();
+  }
+
+  protected function blankRecord(): array {
+    return [
+      'id' => 0,
+      'name' => '',
+      'prompt_key' => '',
+      'template_name' => '',
+      'field_names' => '[]',
+      'prompt_body' => '',
+      'notes' => '',
+      'created' => '',
+      'modified' => '',
+    ];
+  }
+
+  protected function formatDate(string $date): string {
+    $timestamp = strtotime($date);
+    return $timestamp ? wireDate('Y-m-d H:i', $timestamp) : '';
+  }
+
+  protected function notFound(): string {
+    $this->error($this->_('Prompt definition not found.'));
+    return '<p><a href="../">' . $this->_('Back to list') . '</a></p>';
+  }
+
+  protected function tableName(): string {
+    $prefix = (string) $this->wire()->config->dbPrefix;
+    $table = $prefix . self::TABLE_BASE;
+
+    return preg_replace('/[^A-Za-z0-9_]/', '', $table);
+  }
+
+  public function ___install(): void {
+    parent::___install();
+    $this->ensureProcessPage();
+    $this->installTable();
+  }
+
+  public function ___uninstall(): void {
+    parent::___uninstall();
+    $this->dropTable();
+  }
+
+  public function ___upgrade($fromVersion, $toVersion): void {
+    parent::___upgrade($fromVersion, $toVersion);
+    $this->ensureProcessPage();
+  }
+
+  protected function ensureProcessPage(): void {
+    $info = $this->wire()->modules->getModuleInfoVerbose($this, ['noCache' => true]);
+    if (empty($info['page'])) return;
+
+    $page = $this->getProcessPage();
+    if ($page && $page->id) return;
+
+    $pageInfo = is_array($info['page']) ? $info['page'] : ['name' => (string) $info['page']];
+    $defaults = [
+      'name' => '',
+      'parent' => null,
+      'title' => '',
+      'template' => 'admin',
+    ];
+    $pageInfo = array_merge($defaults, $pageInfo);
+    $extras = array_diff_key($pageInfo, $defaults);
+
+    $this->installPage(
+      $pageInfo['name'],
+      $pageInfo['parent'],
+      $pageInfo['title'],
+      $pageInfo['template'],
+      $extras
+    );
+  }
+
+  protected function installTable(): void {
+    $table = $this->tableName();
+    $this->wire()->database->exec(
+      "CREATE TABLE IF NOT EXISTS `$table` (
+        `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `name` VARCHAR(255) NOT NULL,
+        `prompt_key` VARCHAR(128) NOT NULL,
+        `template_name` VARCHAR(128) NOT NULL,
+        `field_names` MEDIUMTEXT NOT NULL,
+        `prompt_body` MEDIUMTEXT NOT NULL,
+        `notes` TEXT NOT NULL,
+        `created` DATETIME NOT NULL,
+        `modified` DATETIME NOT NULL,
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `prompt_key` (`prompt_key`),
+        KEY `template_name` (`template_name`),
+        KEY `modified` (`modified`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+    );
+  }
+
+  protected function dropTable(): void {
+    $table = $this->tableName();
+    $this->wire()->database->exec("DROP TABLE IF EXISTS `$table`");
+  }
+}
