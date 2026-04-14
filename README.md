@@ -20,16 +20,28 @@ This is a beta release. Test it against your own templates, fields, exports, per
 
 ## Installation
 
-1. Copy the module folder to:
+1. Download the `0.0.5Beta` release zip:
+
+   ```text
+   https://github.com/clipmagic/ProcessPromptManager/archive/refs/tags/0.0.5Beta.zip
+   ```
+
+   Or clone the repository from:
+
+   ```text
+   https://github.com/clipmagic/ProcessPromptManager
+   ```
+
+2. Copy the module folder to:
 
    ```text
    /site/modules/ProcessPromptManager/
    ```
 
-2. In the ProcessWire admin, go to **Modules > Refresh**.
-3. Install **Prompt Manager**.
-4. Confirm the `prompt-manager` permission exists.
-5. Assign the `prompt-manager` permission to any role that should manage prompt definitions.
+3. In the ProcessWire admin, go to **Modules > Refresh**.
+4. Install **Prompt Manager**.
+5. Confirm the `prompt-manager` permission exists.
+6. Assign the `prompt-manager` permission to any role that should manage prompt definitions.
 
 After installation, the admin page is available under:
 
@@ -115,6 +127,12 @@ The markdown export includes:
 The generated guidance is based on ProcessWire field types and field context where available.
 
 Tip: include a clear stop cue in your own prompt instructions. Tell the agent what to return when required conditions cannot be met, for example when source data is missing, a required field cannot be populated confidently, or no valid Page Reference option applies.
+
+Example prompt instruction:
+
+```text
+Write a concise service page for the selected template fields. Use only information provided in this prompt and its source data. If a required field cannot be completed confidently, return STOP with a short reason instead of inventing missing details.
+```
 
 ## Sidecar JSON Files
 
