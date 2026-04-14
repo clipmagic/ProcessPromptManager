@@ -20,13 +20,15 @@ This is a beta release. Test it against your own templates, fields, exports, per
 
 ## Installation
 
-1. Download the `0.0.5Beta` release zip:
+1. Get the module using one of these options:
+
+   Download the `0.0.5Beta` release zip:
 
    ```text
    https://github.com/clipmagic/ProcessPromptManager/archive/refs/tags/0.0.5Beta.zip
    ```
 
-   Or clone the repository from:
+   Or clone the repository:
 
    ```text
    https://github.com/clipmagic/ProcessPromptManager
@@ -103,11 +105,11 @@ The main JSON export intentionally contains field names only:
 
 ```json
 {
-  "fields": [
-    "title",
-    "summary",
-    "body"
-  ]
+   "fields": [
+      "title",
+      "summary",
+      "body"
+   ]
 }
 ```
 
@@ -146,9 +148,9 @@ Default example:
 
 ```json
 [
-  "Matt",
-  "Ally",
-  "Zac"
+   "Matt",
+   "Ally",
+   "Zac"
 ]
 ```
 
@@ -171,9 +173,9 @@ Example:
 
 ```json
 [
-  "good",
-  "average",
-  "poor"
+   "good",
+   "average",
+   "poor"
 ]
 ```
 
