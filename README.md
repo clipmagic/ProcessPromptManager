@@ -133,7 +133,10 @@ Tip: include a clear stop cue in your own prompt instructions. Tell the agent wh
 Example prompt instruction:
 
 ```text
-Write a concise service page for the selected template fields. Use only information provided in this prompt and its source data. If a required field cannot be completed confidently, return STOP with a short reason instead of inventing missing details.
+Write a concise service page for the selected template fields. 
+Use only information provided in this prompt and its source data. 
+If a required field cannot be completed confidently, return STOP 
+with a short reason instead of inventing missing details.
 ```
 
 ## Sidecar JSON Files
