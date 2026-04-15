@@ -147,13 +147,6 @@ class PromptManagerHelper extends Wire {
       }
     }
 
-    if (trim($notes) !== '') {
-      $lines[] = '';
-      $lines[] = '## Notes';
-      $lines[] = '';
-      $lines[] = trim($notes);
-    }
-
     return implode("\n", $lines);
   }
 

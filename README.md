@@ -66,7 +66,7 @@ Each prompt definition contains:
 - Template
 - Selected template fields
 - Prompt instructions
-- Optional notes
+- Internal notes for hints, tips, and reminders. These notes are not sent to the agent.
 
 ## Basic Workflow
 
@@ -76,7 +76,7 @@ Each prompt definition contains:
 4. Choose a ProcessWire template.
 5. Select the fields the external agent should provide.
 6. Write the prompt instructions.
-7. Add any notes that should appear in the exported markdown.
+7. Add any internal notes for your own hints, tips, and reminders.
 8. Preview the generated output.
 9. Save the definition.
 10. Export the zip file.
@@ -105,11 +105,11 @@ The main JSON export intentionally contains field names only:
 
 ```json
 {
-   "fields": [
-      "title",
-      "summary",
-      "body"
-   ]
+  "fields": [
+    "title",
+    "summary",
+    "body"
+  ]
 }
 ```
 
@@ -124,19 +124,17 @@ The markdown export includes:
 - Field labels
 - Required or optional status
 - Field data guidance
-- Optional notes
 
 The generated guidance is based on ProcessWire field types and field context where available.
+
+Notes entered in the admin form are for internal hints, tips, and reminders only. They are not included in the generated markdown prompt and are not sent to the agent.
 
 **Tip**: include a clear stop cue in your own prompt instructions. Tell the agent what to return when required conditions cannot be met, for example when source data is missing, a required field cannot be populated confidently, or no valid Page Reference option applies.
 
 Example prompt instruction:
 
 ```text
-Write a concise service page for the selected template fields. 
-Use only information provided in this prompt and its source data. 
-If a required field cannot be completed confidently, return STOP 
-with a short reason instead of inventing missing details.
+Write a concise service page for the selected template fields. Use only information provided in this prompt and its source data. If a required field cannot be completed confidently, return STOP with a short reason instead of inventing missing details.
 ```
 
 ## Sidecar JSON Files
@@ -151,9 +149,9 @@ Default example:
 
 ```json
 [
-   "Tom",
-   "Sally",
-   "William"
+  "Tom",
+  "Sally",
+  "William"
 ]
 ```
 
@@ -176,9 +174,9 @@ Example:
 
 ```json
 [
-   "good",
-   "average",
-   "poor"
+  "good",
+  "average",
+  "poor"
 ]
 ```
 
@@ -231,7 +229,7 @@ $wire->addHookAfter('ProcessPromptManager::pageReferenceOptionValue', function(H
 ```
 Explain to the agent how to handle the data in the custom prompt. For example:
 
-```text
+```
 Select a valid person from the `pg_person` sidecar file. 
 Use the `id` value for the `pg_person` field in the JSON payload. 
 You may use the matching `author_name` anywhere appropriate in the article content. 

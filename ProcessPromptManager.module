@@ -268,6 +268,8 @@ class ProcessPromptManager extends Process {
       'type' => 'textarea',
       'name' => 'prompt_notes',
       'label' => $this->_('Notes'),
+      'description' => $this->_('Hints, tips and reminders. NOT sent to the agent'),
+      'notes' => $this->_('For example: Agent is Fred at URL https://agentfred.com'),
       'rows' => 4,
       'value' => $values['notes'],
     ]);
