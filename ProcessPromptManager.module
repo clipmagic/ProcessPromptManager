@@ -62,6 +62,7 @@ class ProcessPromptManager extends Process {
       $this->_('Key'),
       $this->_('Template'),
       $this->_('Modified'),
+      $this->_('Last exported'),
       $this->_('Actions'),
       '<label>' .
         '<input type="checkbox" id="ProcessPromptManagerDeleteAll" class="uk-checkbox" aria-label="' .
@@ -86,6 +87,7 @@ class ProcessPromptManager extends Process {
           $sanitizer->entities((string) $record['prompt_key']),
           $sanitizer->entities((string) $record['template_name']),
           $this->formatDate((string) $record['modified']),
+          $this->formatLastExported((string) ($record['last_exported'] ?? '')),
           implode(' &nbsp; ', $actions),
           '<input type="checkbox" name="deletes[]" value="' . $id . '" class="delete-checkbox uk-checkbox" aria-label="' .
             $sanitizer->entities(sprintf($this->_('Select %s for deletion'), (string) $record['name'])) .
@@ -182,7 +184,7 @@ class ProcessPromptManager extends Process {
     if (!$record) return $this->notFound();
 
     $values = $this->valuesFromRecord($record);
-    $this->downloadExportFromValues($values);
+    $this->downloadExportFromValues($values, (int) $record['id']);
   }
 
   protected function renderEditForm(array $record): string {
@@ -303,6 +305,13 @@ class ProcessPromptManager extends Process {
     $submit->icon = 'save';
     $form->add($submit);
 
+    $form->add([
+      'type' => 'markup',
+      'label' => $this->_('Last exported'),
+      'value' => '<p>' . $sanitizer->entities($this->lastExportedStatus($record)) . '</p>',
+      'icon' => 'clock-o',
+    ]);
+
     $export = $modules->get('InputfieldSubmit');
     $export->name = 'export_prompt';
     $export->value = $this->_('Export files');
@@ -314,7 +323,7 @@ class ProcessPromptManager extends Process {
     }
 
     if ($isPost && $input->post('export_prompt')) {
-      $this->downloadExportFromValues($values);
+      $this->downloadExportFromValues($values, (int) $record['id']);
     }
 
     if ($isPost && !$isUpdateFields && $input->post('save_prompt')) {
@@ -385,7 +394,7 @@ class ProcessPromptManager extends Process {
     );
   }
 
-  protected function downloadExportFromValues(array $values): void {
+  protected function downloadExportFromValues(array $values, int $recordId = 0): void {
     if (!class_exists('\ZipArchive')) {
       throw new WireException($this->_('ZIP support is required to export prompt files.'));
     }
@@ -416,6 +425,10 @@ class ProcessPromptManager extends Process {
     }
     $zip->close();
 
+    if ($recordId > 0) {
+      $this->markRecordExported($recordId);
+    }
+
     header('Content-Type: application/zip');
     header('Content-Disposition: attachment; filename="' . $filename . '.zip"');
     header('Content-Length: ' . filesize($zipPath));
@@ -432,6 +445,7 @@ class ProcessPromptManager extends Process {
       'fields' => $this->helper->decodeFieldNames((string) ($record['field_names'] ?? '')),
       'prompt' => (string) ($record['prompt_body'] ?? ''),
       'notes' => (string) ($record['notes'] ?? ''),
+      'last_exported' => (string) ($record['last_exported'] ?? ''),
     ];
   }
 
@@ -450,6 +464,7 @@ class ProcessPromptManager extends Process {
       'fields' => is_array($fieldValues) ? $fieldValues : [],
       'prompt' => trim((string) $post->get('prompt_body')),
       'notes' => trim((string) $post->get('prompt_notes')),
+      'last_exported' => '',
     ];
   }
 
@@ -528,6 +543,16 @@ class ProcessPromptManager extends Process {
     $query->execute();
   }
 
+  protected function markRecordExported(int $id): void {
+    $this->ensureTableSchema();
+
+    $query = $this->wire()->database->prepare(
+      'UPDATE `' . $this->tableName() . '` SET last_exported = NOW() WHERE id = :id'
+    );
+    $query->bindValue(':id', $id, \PDO::PARAM_INT);
+    $query->execute();
+  }
+
   protected function blankRecord(): array {
     return [
       'id' => 0,
@@ -537,6 +562,7 @@ class ProcessPromptManager extends Process {
       'field_names' => '[]',
       'prompt_body' => '',
       'notes' => '',
+      'last_exported' => '',
       'created' => '',
       'modified' => '',
     ];
@@ -545,6 +571,18 @@ class ProcessPromptManager extends Process {
   protected function formatDate(string $date): string {
     $timestamp = strtotime($date);
     return $timestamp ? wireDate('Y-m-d H:i', $timestamp) : '';
+  }
+
+  protected function formatLastExported(string $date): string {
+    return $this->formatDate($date) ?: $this->_('Never');
+  }
+
+  protected function lastExportedStatus(array $record): string {
+    if (!(int) ($record['id'] ?? 0)) {
+      return $this->_('Save the prompt before export tracking is available.');
+    }
+
+    return $this->formatLastExported((string) ($record['last_exported'] ?? ''));
   }
 
   protected function notFound(): string {
@@ -573,6 +611,8 @@ class ProcessPromptManager extends Process {
   public function ___upgrade($fromVersion, $toVersion): void {
     parent::___upgrade($fromVersion, $toVersion);
     $this->ensureProcessPage();
+    $this->installTable();
+    $this->ensureTableSchema();
   }
 
   protected function ensureProcessPage(): void {
@@ -612,6 +652,7 @@ class ProcessPromptManager extends Process {
         `field_names` MEDIUMTEXT NOT NULL,
         `prompt_body` MEDIUMTEXT NOT NULL,
         `notes` TEXT NOT NULL,
+        `last_exported` DATETIME NULL DEFAULT NULL,
         `created` DATETIME NOT NULL,
         `modified` DATETIME NOT NULL,
         PRIMARY KEY (`id`),
@@ -620,6 +661,23 @@ class ProcessPromptManager extends Process {
         KEY `modified` (`modified`)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
     );
+  }
+
+  protected function ensureTableSchema(): void {
+    $table = $this->tableName();
+    if (!$this->columnExists($table, 'last_exported')) {
+      $this->wire()->database->exec(
+        "ALTER TABLE `$table` ADD `last_exported` DATETIME NULL DEFAULT NULL AFTER `notes`"
+      );
+    }
+  }
+
+  protected function columnExists(string $table, string $column): bool {
+    $query = $this->wire()->database->prepare("SHOW COLUMNS FROM `$table` LIKE :column");
+    $query->bindValue(':column', $column);
+    $query->execute();
+
+    return (bool) $query->fetch(\PDO::FETCH_ASSOC);
   }
 
   protected function dropTable(): void {

@@ -8,7 +8,7 @@ The module does not call an AI service. It prepares prompt and field-definition 
 
 ## Status
 
-Current version: `0.0.5Beta`
+Current version: `0.0.6Beta`
 
 This is a beta release. Test it against your own templates, fields, exports, permissions, and receiving workflow before using it on a production site.
 
@@ -22,10 +22,10 @@ This is a beta release. Test it against your own templates, fields, exports, per
 
 1. Get the module using one of these options:
 
-   Download the `0.0.5Beta` release zip:
+   Download the `0.0.6Beta` release zip:
 
    ```text
-   https://github.com/clipmagic/ProcessPromptManager/archive/refs/tags/0.0.5Beta.zip
+   https://github.com/clipmagic/ProcessPromptManager/archive/refs/tags/0.0.6Beta.zip
    ```
 
    Or clone the repository:
@@ -67,6 +67,7 @@ Each prompt definition contains:
 - Selected template fields
 - Prompt instructions
 - Internal notes for hints, tips, and reminders. These notes are not sent to the agent.
+- Last exported date, set automatically when export files are generated for a saved prompt definition.
 
 ## Basic Workflow
 
@@ -80,6 +81,8 @@ Each prompt definition contains:
 8. Preview the generated output.
 9. Save the definition.
 10. Export the zip file.
+
+The prompt definition list includes a **Last exported** column. The add/edit screen also shows the last exported status near the export button. Unsaved prompts can be exported for preview, but export tracking starts after the prompt definition has been saved.
 
 ## Export Files
 

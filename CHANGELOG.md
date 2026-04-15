@@ -1,16 +1,21 @@
 # Changelog
 
+## 0.0.6Beta - 2026-04-15
+
+- Added last exported tracking for saved prompt definitions.
+- Added `Last exported` column to the prompt definitions list.
+- Added non-editable last exported status near the export button on the add/edit screen.
+- Added upgrade handling for the new `last_exported` database column.
+- Updated README documentation for last exported tracking.
+
 ## 0.0.5Beta - 2026-04-14
 
 - Added public repository README guidance.
+- Added 0.0.5Beta release zip URL to the README installation instructions.
+- Added README example prompt instructions with a `STOP` cue for missing or uncertain required content.
 - Added next-step implementation notes for receiving and processing generated agent data.
 - Added MIT license file.
 - Marked the module as beta and advised testing before production use.
-
-## 0.0.4 - 2026-04-14
-
-- No ProcessPromptManager code changes.
-- Documented that active testing moved to `site/api/BPBlog.php` email notifications and Postman responses.
 
 ## 0.0.3 - 2026-04-13
 
