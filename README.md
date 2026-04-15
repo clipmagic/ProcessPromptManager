@@ -22,10 +22,10 @@ This is a beta release. Test it against your own templates, fields, exports, per
 
 1. Get the module using one of these options:
 
-   Download the `0.0.7Beta` release zip:
+   Download the repository main zip:
 
    ```text
-   https://github.com/clipmagic/ProcessPromptManager/archive/refs/tags/0.0.7Beta.zip
+   https://github.com/clipmagic/ProcessPromptManager/archive/refs/heads/main.zip
    ```
 
    Or clone the repository:
