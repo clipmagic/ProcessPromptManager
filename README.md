@@ -8,7 +8,7 @@ The module does not call an AI service. It prepares prompt and field-definition 
 
 ## Status
 
-Current version: `0.0.6Beta`
+Current version: `0.0.7Beta`
 
 This is a beta release. Test it against your own templates, fields, exports, permissions, and receiving workflow before using it on a production site.
 
@@ -22,10 +22,10 @@ This is a beta release. Test it against your own templates, fields, exports, per
 
 1. Get the module using one of these options:
 
-   Download the `0.0.6Beta` release zip:
+   Download the `0.0.7Beta` release zip:
 
    ```text
-   https://github.com/clipmagic/ProcessPromptManager/archive/refs/tags/0.0.6Beta.zip
+   https://github.com/clipmagic/ProcessPromptManager/archive/refs/tags/0.0.7Beta.zip
    ```
 
    Or clone the repository:
@@ -63,6 +63,7 @@ Each prompt definition contains:
 
 - Name
 - Prompt key
+- Optional endpoint URL for the receiving workflow. Same-site endpoints should be stored as root-relative URLs, for example `/api/endpoint/`, so prompt definitions remain portable between environments.
 - Template
 - Selected template fields
 - Prompt instructions
@@ -74,13 +75,14 @@ Each prompt definition contains:
 1. Go to **Setup > Prompt Manager**.
 2. Click **Add prompt definition**.
 3. Enter a name.
-4. Choose a ProcessWire template.
-5. Select the fields the external agent should provide.
-6. Write the prompt instructions.
-7. Add any internal notes for your own hints, tips, and reminders.
-8. Preview the generated output.
-9. Save the definition.
-10. Export the zip file.
+4. Optionally enter the endpoint URL for the receiving workflow. Use a root-relative URL for this site, for example `/api/endpoint/`.
+5. Choose a ProcessWire template.
+6. Select the fields the external agent should provide.
+7. Write the prompt instructions.
+8. Add any internal notes for your own hints, tips, and reminders.
+9. Preview the generated output.
+10. Save the definition.
+11. Export the zip file.
 
 The prompt definition list includes a **Last exported** column. The add/edit screen also shows the last exported status near the export button. Unsaved prompts can be exported for preview, but export tracking starts after the prompt definition has been saved.
 
@@ -129,6 +131,8 @@ The markdown export includes:
 - Field data guidance
 
 The generated guidance is based on ProcessWire field types and field context where available.
+
+If an endpoint URL is entered, the markdown export includes a **Delivery** section telling the agent where to send the completed JSON payload. Same-site endpoints are stored as root-relative paths and expanded against the current site URL during markdown generation. The endpoint URL is not included in the main JSON export.
 
 Notes entered in the admin form are for internal hints, tips, and reminders only. They are not included in the generated markdown prompt and are not sent to the agent.
 

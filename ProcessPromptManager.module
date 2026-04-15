@@ -203,27 +203,36 @@ class ProcessPromptManager extends Process {
     $form->method = 'post';
     $form->action = (int) $record['id'] ? './?id=' . (int) $record['id'] : './';
 
-    $form->add([
-      'type' => 'text',
-      'name' => 'prompt_name',
-      'label' => $this->_('Prompt name'),
-      'required' => true,
-      'value' => $values['name'],
-    ]);
+    $name = $modules->get('InputfieldText');
+    $name->name = 'prompt_name';
+    $name->label = $this->_('Prompt name');
+    $name->required = true;
+    $name->value = $values['name'];
+    $name->columnWidth = 50;
+    $form->add($name);
+
+    $key = $modules->get('InputfieldText');
+    $key->name = 'prompt_key';
+    $key->label = $this->_('Machine key / purpose');
+    $key->notes = $this->_('A short export key is suggested from the prompt name. You can edit it if needed.');
+    $key->required = true;
+    $key->value = $values['key'];
+    $key->columnWidth = 50;
+    $form->add($key);
 
     $form->add([
       'type' => 'text',
-      'name' => 'prompt_key',
-      'label' => $this->_('Machine key / purpose'),
-      'description' => $this->_('A short export key is suggested from the prompt name. You can edit it if needed.'),
-      'required' => true,
-      'value' => $values['key'],
+      'name' => 'endpoint_url',
+      'label' => $this->_('Endpoint URL'),
+      'description' => $this->_('Optional receiving endpoint for generated agent data. Use a root-relative URL for this site, for example /api/endpoint/. Absolute URLs are for external endpoints only.'),
+      'value' => $values['endpoint_url'],
     ]);
 
     $template = $modules->get('InputfieldSelect');
     $template->name = 'prompt_template';
     $template->label = $this->_('Template');
     $template->required = true;
+    $template->columnWidth = 40;
     $template->addOption('', $this->_('Select a template'));
     foreach ($this->helper->getTemplateOptions() as $templateName => $label) {
       $template->addOption($templateName, $label);
@@ -234,6 +243,7 @@ class ProcessPromptManager extends Process {
     $fields = $modules->get('InputfieldCheckboxes');
     $fields->name = 'prompt_fields';
     $fields->label = $this->_('Included fields');
+    $fields->columnWidth = 60;
     $fields->addClass('ProcessPromptManagerFields');
     $fieldsDescription = $values['template']
       ? $this->_('Stored and exported values are field names. Labels are shown here only for context.')
@@ -255,6 +265,7 @@ class ProcessPromptManager extends Process {
     $update->name = 'update_fields';
     $update->value = $this->_('Update field list');
     $update->icon = 'refresh';
+    $update->attr('style', 'margin-block-end: 20px;');
     $form->add($update);
 
     $form->add([
@@ -303,6 +314,7 @@ class ProcessPromptManager extends Process {
     $submit->name = 'save_prompt';
     $submit->value = $this->_('Save prompt definition');
     $submit->icon = 'save';
+    $submit->attr('style', 'margin-block-end: 20px;');
     $form->add($submit);
 
     $form->add([
@@ -351,6 +363,7 @@ class ProcessPromptManager extends Process {
     if ($values['key'] !== $this->wire()->sanitizer->pageName($values['key'], true)) {
       $errors[] = $this->_('Machine key must be a valid ProcessWire page name.');
     }
+    if (!$this->isValidEndpointUrl($values['endpoint_url'])) $errors[] = $this->_('Endpoint URL must be root-relative or a valid HTTP/HTTPS URL.');
     if (!$this->wire()->templates->get($values['template'])->id) $errors[] = $this->_('A valid template is required.');
     if (trim($values['prompt']) === '') $errors[] = $this->_('Prompt body is required.');
 
@@ -390,7 +403,8 @@ class ProcessPromptManager extends Process {
       $values['template'],
       $normalizedFields,
       $values['prompt'],
-      $values['notes']
+      $values['notes'],
+      $values['endpoint_url']
     );
   }
 
@@ -441,6 +455,7 @@ class ProcessPromptManager extends Process {
     return [
       'name' => (string) ($record['name'] ?? ''),
       'key' => (string) ($record['prompt_key'] ?? ''),
+      'endpoint_url' => (string) ($record['endpoint_url'] ?? ''),
       'template' => (string) ($record['template_name'] ?? ''),
       'fields' => $this->helper->decodeFieldNames((string) ($record['field_names'] ?? '')),
       'prompt' => (string) ($record['prompt_body'] ?? ''),
@@ -460,6 +475,7 @@ class ProcessPromptManager extends Process {
     return [
       'name' => $name,
       'key' => $key,
+      'endpoint_url' => $this->normalizeEndpointUrl((string) $post->get('endpoint_url')),
       'template' => $sanitizer->templateName((string) $post->get('prompt_template')),
       'fields' => is_array($fieldValues) ? $fieldValues : [],
       'prompt' => trim((string) $post->get('prompt_body')),
@@ -505,13 +521,15 @@ class ProcessPromptManager extends Process {
   }
 
   protected function saveRecord(array $values, int $id = 0): int {
+    $this->ensureTableSchema();
+
     $database = $this->wire()->database;
     $fieldsJson = json_encode($values['fields'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '[]';
 
     if ($id) {
       $query = $database->prepare(
         'UPDATE `' . $this->tableName() . '`
-        SET name = :name, prompt_key = :prompt_key, template_name = :template_name,
+        SET name = :name, prompt_key = :prompt_key, endpoint_url = :endpoint_url, template_name = :template_name,
           field_names = :field_names, prompt_body = :prompt_body, notes = :notes, modified = NOW()
         WHERE id = :id'
       );
@@ -519,13 +537,14 @@ class ProcessPromptManager extends Process {
     } else {
       $query = $database->prepare(
         'INSERT INTO `' . $this->tableName() . '`
-        (name, prompt_key, template_name, field_names, prompt_body, notes, created, modified)
-        VALUES (:name, :prompt_key, :template_name, :field_names, :prompt_body, :notes, NOW(), NOW())'
+        (name, prompt_key, endpoint_url, template_name, field_names, prompt_body, notes, created, modified)
+        VALUES (:name, :prompt_key, :endpoint_url, :template_name, :field_names, :prompt_body, :notes, NOW(), NOW())'
       );
     }
 
     $query->bindValue(':name', $values['name']);
     $query->bindValue(':prompt_key', $values['key']);
+    $query->bindValue(':endpoint_url', $this->normalizeEndpointUrl($values['endpoint_url']));
     $query->bindValue(':template_name', $values['template']);
     $query->bindValue(':field_names', $fieldsJson);
     $query->bindValue(':prompt_body', $values['prompt']);
@@ -543,6 +562,60 @@ class ProcessPromptManager extends Process {
     $query->execute();
   }
 
+  protected function normalizeEndpointUrl(string $url): string {
+    $url = trim(str_replace(["\r", "\n", "\t"], '', $url));
+    if ($url === '') return '';
+
+    if (preg_match('#^https?://#i', $url)) {
+      $parts = parse_url($url);
+      $host = $this->endpointUrlHostFromParts($parts ?: []);
+
+      if ($host !== '' && $this->isCurrentHttpHost($host)) {
+        $path = (string) ($parts['path'] ?? '/');
+        if ($path === '') $path = '/';
+        $relative = $path;
+        if (!empty($parts['query'])) $relative .= '?' . $parts['query'];
+        if (!empty($parts['fragment'])) $relative .= '#' . $parts['fragment'];
+
+        return $relative;
+      }
+
+      return $this->wire()->sanitizer->url($url);
+    }
+
+    return $url;
+  }
+
+  protected function isValidEndpointUrl(string $url): bool {
+    $url = trim($url);
+    if ($url === '') return true;
+
+    if ($this->isRootRelativeEndpointUrl($url)) return true;
+
+    return (bool) (
+      filter_var($url, FILTER_VALIDATE_URL) &&
+      preg_match('#^https?://#i', $url)
+    );
+  }
+
+  protected function isRootRelativeEndpointUrl(string $url): bool {
+    return (bool) preg_match('#^/(?!/)[^\r\n\t ]*$#', $url);
+  }
+
+  protected function isCurrentHttpHost(string $host): bool {
+    $currentHost = strtolower(trim((string) $this->wire()->config->httpHost));
+    return $currentHost !== '' && strtolower($host) === $currentHost;
+  }
+
+  protected function endpointUrlHostFromParts(array $parts): string {
+    $host = strtolower((string) ($parts['host'] ?? ''));
+    if ($host === '') return '';
+
+    if (!empty($parts['port'])) $host .= ':' . (int) $parts['port'];
+
+    return $host;
+  }
+
   protected function markRecordExported(int $id): void {
     $this->ensureTableSchema();
 
@@ -558,6 +631,7 @@ class ProcessPromptManager extends Process {
       'id' => 0,
       'name' => '',
       'prompt_key' => '',
+      'endpoint_url' => '',
       'template_name' => '',
       'field_names' => '[]',
       'prompt_body' => '',
@@ -648,6 +722,7 @@ class ProcessPromptManager extends Process {
         `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
         `name` VARCHAR(255) NOT NULL,
         `prompt_key` VARCHAR(128) NOT NULL,
+        `endpoint_url` VARCHAR(2048) NOT NULL DEFAULT '',
         `template_name` VARCHAR(128) NOT NULL,
         `field_names` MEDIUMTEXT NOT NULL,
         `prompt_body` MEDIUMTEXT NOT NULL,
@@ -668,6 +743,11 @@ class ProcessPromptManager extends Process {
     if (!$this->columnExists($table, 'last_exported')) {
       $this->wire()->database->exec(
         "ALTER TABLE `$table` ADD `last_exported` DATETIME NULL DEFAULT NULL AFTER `notes`"
+      );
+    }
+    if (!$this->columnExists($table, 'endpoint_url')) {
+      $this->wire()->database->exec(
+        "ALTER TABLE `$table` ADD `endpoint_url` VARCHAR(2048) NOT NULL DEFAULT '' AFTER `prompt_key`"
       );
     }
   }

@@ -125,18 +125,36 @@ class PromptManagerHelper extends Wire {
     string $templateName,
     array $fields,
     string $prompt,
-    string $notes = ''
+    string $notes = '',
+    string $endpointUrl = ''
   ): string {
     $lines = [
       '# Instructions',
       '',
       trim($prompt) ?: '_No prompt instructions entered yet._',
       '',
+    ];
+
+    $endpointUrl = $this->endpointUrlForPrompt($endpointUrl);
+    if ($endpointUrl !== '') {
+      $lines = array_merge($lines, [
+        '## Delivery',
+        '',
+        'When the JSON payload is complete, send it to this endpoint:',
+        '',
+        $endpointUrl,
+        '',
+        'Do not include this endpoint URL inside the JSON payload.',
+        '',
+      ]);
+    }
+
+    $lines = array_merge($lines, [
       '## Field data to provide (must match JSON field names exactly)',
       '',
       'Required fields must always be included. Do not invent values if the correct value is unknown. If a required field cannot be confidently populated, leave it empty.',
       '',
-    ];
+    ]);
 
     $fieldDefinitions = $this->getFieldDefinitions($templateName, $fields, $key);
     if (!$fieldDefinitions) {
@@ -148,6 +166,18 @@ class PromptManagerHelper extends Wire {
     }
 
     return implode("\n", $lines);
+  }
+
+  protected function endpointUrlForPrompt(string $endpointUrl): string {
+    $endpointUrl = trim($endpointUrl);
+    if ($endpointUrl === '') return '';
+
+    if (preg_match('#^/(?!/)#', $endpointUrl)) {
+      $home = $this->wire()->pages->get('/');
+      return rtrim($home->httpUrl, '/') . $endpointUrl;
+    }
+
+    return $endpointUrl;
   }
 
   public function buildPayload(

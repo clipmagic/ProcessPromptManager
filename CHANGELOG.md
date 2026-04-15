@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.7Beta - 2026-04-16
+
+- Added optional endpoint URL storage for prompt definitions.
+- Added Endpoint URL field to the add/edit screen.
+- Added endpoint URL delivery instructions to generated markdown prompts when populated.
+- Normalized same-site endpoint URLs to root-relative paths for portability between environments.
+- Added upgrade handling for the new `endpoint_url` database column.
+- Kept endpoint URL hidden from the prompt definitions list.
+
 ## 0.0.6Beta - 2026-04-15
 
 - Added last exported tracking for saved prompt definitions.
