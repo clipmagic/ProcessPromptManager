@@ -237,7 +237,7 @@ $wire->addHookAfter('ProcessPromptManager::pageReferenceOptionValue', function(H
 Explain to the agent how to handle the data in the custom prompt. For example:
 
 ```
-Select a valid person from the `pg_person` sidecar file. 
+Select a valid person from the accompanying `pg_person` sidecar data. 
 Use the `id` value for the `pg_person` field in the JSON payload. 
 You may use the matching `author_name` anywhere appropriate in the article content. 
 Do not invent people.

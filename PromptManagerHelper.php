@@ -298,9 +298,9 @@ class PromptManagerHelper extends Wire {
 
   protected function fieldTextareaHint(Field $field): string {
     $inputfieldClass = $this->fieldConfigValue($field, 'inputfieldClass');
-    if ($inputfieldClass === '' || $inputfieldClass === 'InputfieldTextarea') return 'long text';
+    if ($inputfieldClass === '' || $inputfieldClass === 'InputfieldTextarea') return 'long text; return as a JSON string, not an array or object';
 
-    return 'long text, HTML/formatting allowed';
+    return 'long text, HTML/formatting allowed; return as a JSON string, not an array or object';
   }
 
   protected function fieldNumberHint(Field $field): string {
@@ -395,7 +395,7 @@ class PromptManagerHelper extends Wire {
     $options = $this->fieldOptionChoices($field);
     $multiple = $this->fieldOptionsAllowMultiple($field);
     if ($promptKey !== '') {
-      $prefix = $multiple ? 'choose one or more from: ' : 'choose one from: ';
+      $prefix = $multiple ? 'choose one or more option values from accompanying sidecar JSON: ' : 'choose one option value from accompanying sidecar JSON: ';
       return $prefix . $this->fieldOptionsFilename($promptKey, $field->name);
     }
 
@@ -584,7 +584,7 @@ class PromptManagerHelper extends Wire {
     $values = $this->fieldPageReferenceValues($field, $template);
 
     if ($values !== null && $promptKey !== '') {
-      $prefix = $multiple ? 'choose one or more from: ' : 'choose one from: ';
+      $prefix = $multiple ? 'choose one or more id values from accompanying sidecar JSON: ' : 'choose one id value from accompanying sidecar JSON: ';
       return $prefix . $this->fieldOptionsFilename($promptKey, $field->name);
     }
 
