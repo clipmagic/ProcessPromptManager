@@ -11,6 +11,7 @@ namespace ProcessWire;
 class PromptManagerHelper extends Wire {
 
   protected ?Wire $pageReferenceOptionValueProvider = null;
+  protected ?Wire $sidecarOptionAllowProvider = null;
 
   protected array $excludedFieldNames = [
     'id',
@@ -57,6 +58,10 @@ class PromptManagerHelper extends Wire {
 
   public function setPageReferenceOptionValueProvider(Wire $provider): void {
     $this->pageReferenceOptionValueProvider = $provider;
+  }
+
+  public function setSidecarOptionAllowProvider(Wire $provider): void {
+    $this->sidecarOptionAllowProvider = $provider;
   }
 
   public function getSelectableFieldsForTemplate(string $templateName): array {
@@ -126,7 +131,8 @@ class PromptManagerHelper extends Wire {
     array $fields,
     string $prompt,
     string $notes = '',
-    string $endpointUrl = ''
+    string $endpointUrl = '',
+    bool $includeSidecars = false
   ): string {
     $lines = [
       '# Instructions',
@@ -165,7 +171,65 @@ class PromptManagerHelper extends Wire {
       }
     }
 
+    $sidecarInstructions = $this->buildSidecarUsageInstructions($key, $templateName, $fields);
+    if ($sidecarInstructions !== '') {
+      $lines = array_merge($lines, [
+        '',
+        $sidecarInstructions,
+      ]);
+    }
+
+    if ($includeSidecars) {
+      $sidecars = $this->buildInlineSidecarMarkdown($key, $templateName, $fields);
+      if ($sidecars !== '') {
+        $lines = array_merge($lines, [
+          '',
+          $sidecars,
+        ]);
+      }
+    }
+
     return implode("\n", $lines);
+  }
+
+  public function buildInlineSidecarMarkdown(string $promptKey, string $templateName, array $fieldNames): string {
+    $sections = [];
+    foreach ($this->buildSidecarOptionFiles($promptKey, $templateName, $fieldNames) as $filename => $json) {
+      $sections[] = '### Accompanying sidecar JSON file: ' . $filename . "\n\n" .
+        "```json\n" .
+        trim((string) $json) .
+        "\n```";
+    }
+
+    if (!$sections) return '';
+
+    return "## Accompanying Sidecar JSON\n\n" .
+      "Use these inline sidecar JSON sections exactly as if they were provided as separate sidecar files.\n\n" .
+      implode("\n\n", $sections);
+  }
+
+  public function buildSidecarUsageInstructions(string $promptKey, string $templateName, array $fieldNames): string {
+    if (!$this->buildSidecarOptionFiles($promptKey, $templateName, $fieldNames)) return '';
+
+    return "## Sidecar JSON Rules\n\n" .
+      "When using accompanying sidecar JSON:\n\n" .
+      "- Each sidecar JSON object names the field it belongs to in `field`.\n" .
+      "- Only use values from the sidecar whose `field` matches the JSON field you are returning.\n" .
+      "- For Page Reference fields, return `id` values from that field's `values`, not names or labels.\n" .
+      "- Before returning any Page Reference field, verify that every id appears inside that exact field's sidecar `values` array.\n" .
+      "- If no id from that exact field's sidecar directly matches the source, return an empty array for that field.\n" .
+      "- For taxonomy-style Page Reference fields, choose ids only when the option title, name, or synonyms directly match the generated title, summary, or body.\n" .
+      "- Do not choose taxonomy ids based only on source material that is not included in the generated content.\n" .
+      "- Do not choose taxonomy ids based only on source metadata fields or sidecar data; the taxonomy concept must be visible in the generated article content.\n" .
+      "- Do not use an id from one field's sidecar JSON for another field.\n" .
+      "- For Options fields, return the exact option value from that field's `values`.";
+  }
+
+  public function buildSidecarOptionFiles(string $promptKey, string $templateName, array $fieldNames): array {
+    return array_merge(
+      $this->buildPageReferenceOptionFiles($promptKey, $templateName, $fieldNames),
+      $this->buildFieldChoiceOptionFiles($promptKey, $templateName, $fieldNames)
+    );
   }
 
   protected function endpointUrlForPrompt(string $endpointUrl): string {
@@ -552,8 +616,16 @@ class PromptManagerHelper extends Wire {
         continue;
       }
 
-      $values = array_map(fn(array $option): string => (string) $option['value'], $choices);
-      $files[$this->fieldOptionsFilename($promptKey, $field->name)] = $this->payloadToJson($values) . "\n";
+      $values = [];
+      foreach ($choices as $option) {
+        if (!$this->allowSidecarOption($field, $option, $template)) continue;
+        $values[] = (string) $option['value'];
+      }
+      if (!$values) continue;
+
+      $files[$this->fieldOptionsFilename($promptKey, $field->name)] = $this->payloadToJson(
+        $this->sidecarPayload($field->name, 'option_value', $values)
+      ) . "\n";
     }
 
     return $files;
@@ -573,10 +645,25 @@ class PromptManagerHelper extends Wire {
       $values = $this->fieldPageReferenceValues($field, $template);
       if ($values === null) continue;
 
-      $files[$this->fieldOptionsFilename($promptKey, $field->name)] = $this->payloadToJson($values) . "\n";
+      $files[$this->fieldOptionsFilename($promptKey, $field->name)] = $this->payloadToJson(
+        $this->sidecarPayload($field->name, 'page_id', $values)
+      ) . "\n";
     }
 
     return $files;
+  }
+
+  protected function sidecarPayload(string $fieldName, string $valueType, array $values): array {
+    $returnInstruction = $valueType === 'page_id'
+      ? 'Return id values from values for this field only.'
+      : 'Return exact option values from values for this field only.';
+
+    return [
+      'field' => $fieldName,
+      'value_type' => $valueType,
+      'return' => $returnInstruction,
+      'values' => $values,
+    ];
   }
 
   protected function fieldPageReferenceHint(Field $field, string $promptKey = '', ?Template $template = null): string {
@@ -617,6 +704,7 @@ class PromptManagerHelper extends Wire {
       if (!$page instanceof Page || !$page->id) continue;
       if ($this->pageIsInExcludedRoot($page, $excludedRootPageIds)) continue;
       if (in_array((int) $page->template->id, $excludedTemplateIds, true)) continue;
+      if (!$this->allowSidecarOption($field, $page, $template)) continue;
 
       $value = $this->pageReferenceOptionValue($page, $field, $template);
       if ($value === null) continue;
@@ -630,12 +718,33 @@ class PromptManagerHelper extends Wire {
     return $values;
   }
 
+  protected function allowSidecarOption(Field $field, mixed $option, ?Template $template = null): bool {
+    if (!$this->sidecarOptionAllowProvider) return true;
+
+    return (bool) $this->sidecarOptionAllowProvider->allowSidecarOption($field, $option, $template);
+  }
+
   protected function pageReferenceOptionValue(Page $page, Field $field, ?Template $template = null): mixed {
-    if ($this->pageReferenceOptionValueProvider) {
-      return $this->pageReferenceOptionValueProvider->pageReferenceOptionValue($page, $field, $template);
+    $value = $this->pageReferenceOptionValueProvider
+      ? $this->pageReferenceOptionValueProvider->pageReferenceOptionValue($page, $field, $template)
+      : trim((string) $page->get('title|name'));
+
+    return $this->normalizedPageReferenceOptionValue($page, $value);
+  }
+
+  protected function normalizedPageReferenceOptionValue(Page $page, mixed $value): mixed {
+    $base = [
+      'id' => (int) $page->id,
+      'title' => trim((string) $page->get('title|name')),
+    ];
+
+    if (is_array($value)) return $value + $base;
+    if (is_scalar($value)) {
+      $value = trim((string) $value);
+      if ($value !== '') $base['value'] = $value;
     }
 
-    return trim((string) $page->get('title|name'));
+    return $base;
   }
 
   protected function sortPageReferenceValues(array &$values): void {

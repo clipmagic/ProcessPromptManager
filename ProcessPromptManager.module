@@ -20,10 +20,15 @@ class ProcessPromptManager extends Process {
     parent::init();
     $this->helper = $this->wire(new PromptManagerHelper());
     $this->helper->setPageReferenceOptionValueProvider($this);
+    $this->helper->setSidecarOptionAllowProvider($this);
   }
 
   public function ___pageReferenceOptionValue(Page $page, Field $field, ?Template $template = null): mixed {
     return trim((string) $page->get('title|name'));
+  }
+
+  public function ___allowSidecarOption(Field $field, mixed $option, ?Template $template = null): bool {
+    return true;
   }
 
   public function ___execute(): string {
@@ -228,6 +233,16 @@ class ProcessPromptManager extends Process {
       'value' => $values['endpoint_url'],
     ]);
 
+    $form->add([
+      'type' => 'checkbox',
+      'name' => 'include_sidecars',
+      'label' => $this->_('Include sidecar JSON in prompt'),
+      'description' => $this->_('Append Page Reference and Options sidecar JSON directly to the generated markdown prompt. Leave unchecked when the agent can receive sidecar JSON files separately.'),
+      'notes' => $this->_('Inlining sidecar JSON can increase token usage. Use it for agents or workflows that cannot upload or attach the exported sidecar files.'),
+      'value' => 1,
+      'checked' => (bool) $values['include_sidecars'],
+    ]);
+
     $template = $modules->get('InputfieldSelect');
     $template->name = 'prompt_template';
     $template->label = $this->_('Template');
@@ -404,7 +419,8 @@ class ProcessPromptManager extends Process {
       $normalizedFields,
       $values['prompt'],
       $values['notes'],
-      $values['endpoint_url']
+      $values['endpoint_url'],
+      (bool) $values['include_sidecars']
     );
   }
 
@@ -430,11 +446,7 @@ class ProcessPromptManager extends Process {
 
     $zip->addFromString($filename . '.md', $markdown);
     $zip->addFromString($filename . '.json', $json);
-    foreach ($this->helper->buildPageReferenceOptionFiles($filename, $values['template'], $values['fields']) as $optionFilename => $optionJson) {
-      $zip->addFromString($optionFilename, $optionJson);
-    }
-    $choiceOptionFiles = $this->helper->buildFieldChoiceOptionFiles($filename, $values['template'], $values['fields']);
-    foreach ($choiceOptionFiles as $optionFilename => $optionJson) {
+    foreach ($this->helper->buildSidecarOptionFiles($filename, $values['template'], $values['fields']) as $optionFilename => $optionJson) {
       $zip->addFromString($optionFilename, $optionJson);
     }
     $zip->close();
@@ -456,6 +468,7 @@ class ProcessPromptManager extends Process {
       'name' => (string) ($record['name'] ?? ''),
       'key' => (string) ($record['prompt_key'] ?? ''),
       'endpoint_url' => (string) ($record['endpoint_url'] ?? ''),
+      'include_sidecars' => (int) ($record['include_sidecars'] ?? 0),
       'template' => (string) ($record['template_name'] ?? ''),
       'fields' => $this->helper->decodeFieldNames((string) ($record['field_names'] ?? '')),
       'prompt' => (string) ($record['prompt_body'] ?? ''),
@@ -476,6 +489,7 @@ class ProcessPromptManager extends Process {
       'name' => $name,
       'key' => $key,
       'endpoint_url' => $this->normalizeEndpointUrl((string) $post->get('endpoint_url')),
+      'include_sidecars' => (int) (bool) $post->get('include_sidecars'),
       'template' => $sanitizer->templateName((string) $post->get('prompt_template')),
       'fields' => is_array($fieldValues) ? $fieldValues : [],
       'prompt' => trim((string) $post->get('prompt_body')),
@@ -530,15 +544,16 @@ class ProcessPromptManager extends Process {
       $query = $database->prepare(
         'UPDATE `' . $this->tableName() . '`
         SET name = :name, prompt_key = :prompt_key, endpoint_url = :endpoint_url, template_name = :template_name,
-          field_names = :field_names, prompt_body = :prompt_body, notes = :notes, modified = NOW()
+          field_names = :field_names, prompt_body = :prompt_body, notes = :notes,
+          include_sidecars = :include_sidecars, modified = NOW()
         WHERE id = :id'
       );
       $query->bindValue(':id', $id, \PDO::PARAM_INT);
     } else {
       $query = $database->prepare(
         'INSERT INTO `' . $this->tableName() . '`
-        (name, prompt_key, endpoint_url, template_name, field_names, prompt_body, notes, created, modified)
-        VALUES (:name, :prompt_key, :endpoint_url, :template_name, :field_names, :prompt_body, :notes, NOW(), NOW())'
+        (name, prompt_key, endpoint_url, template_name, field_names, prompt_body, notes, include_sidecars, created, modified)
+        VALUES (:name, :prompt_key, :endpoint_url, :template_name, :field_names, :prompt_body, :notes, :include_sidecars, NOW(), NOW())'
       );
     }
 
@@ -549,6 +564,7 @@ class ProcessPromptManager extends Process {
     $query->bindValue(':field_names', $fieldsJson);
     $query->bindValue(':prompt_body', $values['prompt']);
     $query->bindValue(':notes', $values['notes']);
+    $query->bindValue(':include_sidecars', (int) $values['include_sidecars'], \PDO::PARAM_INT);
     $query->execute();
 
     return $id ?: (int) $database->lastInsertId();
@@ -632,6 +648,7 @@ class ProcessPromptManager extends Process {
       'name' => '',
       'prompt_key' => '',
       'endpoint_url' => '',
+      'include_sidecars' => 0,
       'template_name' => '',
       'field_names' => '[]',
       'prompt_body' => '',
@@ -727,6 +744,7 @@ class ProcessPromptManager extends Process {
         `field_names` MEDIUMTEXT NOT NULL,
         `prompt_body` MEDIUMTEXT NOT NULL,
         `notes` TEXT NOT NULL,
+        `include_sidecars` TINYINT UNSIGNED NOT NULL DEFAULT 0,
         `last_exported` DATETIME NULL DEFAULT NULL,
         `created` DATETIME NOT NULL,
         `modified` DATETIME NOT NULL,
@@ -748,6 +766,11 @@ class ProcessPromptManager extends Process {
     if (!$this->columnExists($table, 'endpoint_url')) {
       $this->wire()->database->exec(
         "ALTER TABLE `$table` ADD `endpoint_url` VARCHAR(2048) NOT NULL DEFAULT '' AFTER `prompt_key`"
+      );
+    }
+    if (!$this->columnExists($table, 'include_sidecars')) {
+      $this->wire()->database->exec(
+        "ALTER TABLE `$table` ADD `include_sidecars` TINYINT UNSIGNED NOT NULL DEFAULT 0 AFTER `notes`"
       );
     }
   }

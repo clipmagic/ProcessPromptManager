@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Changed Page Reference and Select Options sidecar JSON exports to self-identifying objects with `field`, `value_type`, `return`, and `values` keys.
+- Added sidecar usage rules to generated markdown prompts when selected fields have sidecar JSON.
+- Added `ProcessPromptManager::allowSidecarOption()` for filtering Page Reference and Select Options sidecar entries before export.
+
 ## 0.0.7Beta - 2026-04-16
 
 - Added optional endpoint URL storage for prompt definitions.

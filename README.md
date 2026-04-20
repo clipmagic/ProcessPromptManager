@@ -79,10 +79,11 @@ Each prompt definition contains:
 5. Choose a ProcessWire template.
 6. Select the fields the external agent should provide.
 7. Write the prompt instructions.
-8. Add any internal notes for your own hints, tips, and reminders.
-9. Preview the generated output.
-10. Save the definition.
-11. Export the zip file.
+8. Choose whether sidecar JSON should be included inline in the generated prompt.
+9. Add any internal notes for your own hints, tips, and reminders.
+10. Preview the generated output.
+11. Save the definition.
+12. Export the zip file.
 
 The prompt definition list includes a **Last exported** column. The add/edit screen also shows the last exported status near the export button. Unsaved prompts can be exported for preview, but export tracking starts after the prompt definition has been saved.
 
@@ -94,6 +95,8 @@ An export zip can contain:
 - `{prompt_key}.json`
 - `{prompt_key}__{field_name}.json` sidecar files for enumerable Page Reference fields
 - `{prompt_key}__{field_name}.json` sidecar files for Select Options fields
+
+Sidecar JSON is exported as separate files by default. If **Include sidecar JSON in prompt** is checked, the markdown prompt also includes the sidecar JSON inline. This is useful for agents or workflows that cannot upload or attach sidecar files, but it can increase token usage.
 
 Example:
 
@@ -150,16 +153,26 @@ Some field types need a list of allowed values. These lists are exported as sepa
 
 ### Page Reference Fields
 
-Enumerable Page Reference fields are exported as flat JSON arrays.
+Enumerable Page Reference fields are exported as JSON objects that identify the field and list the valid values. Default options include the referenced page `id` and `title`.
 
 Default example:
 
 ```json
-[
-  "Tom",
-  "Sally",
-  "William"
-]
+{
+  "field": "blog_tags",
+  "value_type": "page_id",
+  "return": "Return id values from values for this field only.",
+  "values": [
+    {
+      "id": 123,
+      "title": "Diabetic foot care"
+    },
+    {
+      "id": 124,
+      "title": "Sports injuries"
+    }
+  ]
+}
 ```
 
 Page Reference option exports exclude internal/system pages including:
@@ -175,19 +188,24 @@ Dynamic Page Reference selectors using `page.` / `item.` and `findPagesCode` are
 
 ### Select Options Fields
 
-Select Options fields are exported as flat arrays of valid values only.
+Select Options fields are exported as JSON objects that identify the field and list the exact valid values.
 
 Example:
 
 ```json
-[
-  "good",
-  "average",
-  "poor"
-]
+{
+  "field": "rating",
+  "value_type": "option_value",
+  "return": "Return exact option values from values for this field only.",
+  "values": [
+    "good",
+    "average",
+    "poor"
+  ]
+}
 ```
 
-Labels and metadata are intentionally not included in Select Options sidecar files.
+Option labels are intentionally not included in Select Options sidecar files.
 
 ## Field Guidance Notes
 
@@ -211,13 +229,43 @@ If a custom fieldtype needs special handling, please discuss it in the ProcessWi
 
 ## Customising Page Reference Sidecar Values
 
+The module exposes a hookable method for filtering sidecar options before they are exported:
+
+```php
+ProcessPromptManager::allowSidecarOption(Field $field, mixed $option, ?Template $template = null)
+```
+
+The `$option` argument depends on the sidecar field type:
+
+- Page Reference fields receive a `Page`.
+- Select Options fields receive the option data used by Prompt Manager.
+
+Return `false` to exclude the option from the sidecar.
+
+Example:
+
+```php
+$wire->addHookAfter('ProcessPromptManager::allowSidecarOption', function(HookEvent $event) {
+    $field = $event->arguments(0);
+    $option = $event->arguments(1);
+    $template = $event->arguments(2);
+
+    if (!$field instanceof Field || !$template instanceof Template) return;
+    if ($template->name !== 'blog-article' || $field->name !== 'pg_person') return;
+    if (!$option instanceof Page) return;
+
+    $event->return = $option->template->name === 'team-member'
+        && (int) $option->staff_category->id === 1;
+});
+```
+
 The module exposes a hookable method for Page Reference option values:
 
 ```php
 ProcessPromptManager::pageReferenceOptionValue(Page $page, Field $field, ?Template $template = null)
 ```
 
-By default, it returns the page title or name.
+By default, Page Reference sidecar options include the page `id` and `title`. The `id` is the value the agent should return for the Page Reference field.
 
 Example:
 
@@ -243,6 +291,33 @@ You may use the matching `author_name` anywhere appropriate in the article conte
 Do not invent people.
 ```
 This hook is currently limited to Page Reference sidecar exports.
+
+For taxonomy-style references, a useful ProcessWire pattern is to add a `synonyms` or `keywords` field to the referenced pages and expose that data in the sidecar. This lets the agent match source text to valid site taxonomy without hardcoding those terms in the prompt.
+
+Example:
+
+```php
+$wire->addHookAfter('ProcessPromptManager::pageReferenceOptionValue', function(HookEvent $event) {
+    $page = $event->arguments(0);
+    $field = $event->arguments(1);
+
+    if (!in_array($field->name, ['blog_tags', 'pg_services', 'pg_conditions'], true)) return;
+
+    $synonyms = array_filter(array_map('trim', explode(',', (string) $page->synonyms)));
+
+    $event->return = [
+        'id' => (int) $page->id,
+        'title' => (string) $page->title,
+        'synonyms' => array_values($synonyms),
+    ];
+});
+```
+
+Prompt wording can then stay generic:
+
+```
+For taxonomy Page Reference fields, choose sidecar id values when the source directly matches the option title or synonyms. Do not choose options without evidence in the source.
+```
 
 ## What This Module Does Not Do
 
