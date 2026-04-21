@@ -5,6 +5,7 @@
 - Changed Page Reference and Select Options sidecar JSON exports to self-identifying objects with `field`, `value_type`, `return`, and `values` keys.
 - Added sidecar usage rules to generated markdown prompts when selected fields have sidecar JSON.
 - Added `ProcessPromptManager::allowSidecarOption()` for filtering Page Reference and Select Options sidecar entries before export.
+- Documented that downstream consumers should reuse Prompt Manager sidecar filtering/value providers when they consume inline sidecars.
 
 ## 0.0.7Beta - 2026-04-16
 

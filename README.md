@@ -319,6 +319,8 @@ Prompt wording can then stay generic:
 For taxonomy Page Reference fields, choose sidecar id values when the source directly matches the option title or synonyms. Do not choose options without evidence in the source.
 ```
 
+Downstream consumers that reuse Prompt Manager sidecars, such as ProcessPromptToPage, should call through Prompt Manager helper/provider methods so `allowSidecarOption()` filtering and `pageReferenceOptionValue()` shaping stay consistent with direct exports.
+
 ## What This Module Does Not Do
 
 - It does not call OpenAI, Anthropic, or any other AI API.
