@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.0.8Beta - 2026-04-21
 
 - Changed Page Reference and Select Options sidecar JSON exports to self-identifying objects with `field`, `value_type`, `return`, and `values` keys.
 - Added sidecar usage rules to generated markdown prompts when selected fields have sidecar JSON.

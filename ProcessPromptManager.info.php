@@ -3,7 +3,7 @@
 $info = [
   'title' => __('Prompt Manager', __FILE__),
   'summary' => __('Manage site-aware AI agent prompt definitions tied to template fields.', __FILE__),
-  'version' => '0.0.7Beta',
+  'version' => '0.0.8Beta',
   'author' => 'Clip Magic, Marvin and Dex',
   'icon' => 'commenting-o',
   'requires' => 'ProcessWire>=3.0.0',

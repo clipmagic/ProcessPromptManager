@@ -8,7 +8,7 @@ The module does not call an AI service. It prepares prompt and field-definition 
 
 ## Status
 
-Current version: `0.0.7Beta`
+Current version: `0.0.8Beta`
 
 This is a beta release. Test it against your own templates, fields, exports, permissions, and receiving workflow before using it on a production site.
 
